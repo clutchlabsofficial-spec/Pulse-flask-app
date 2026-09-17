@@ -71,6 +71,44 @@ on its own. `TUNING` holds the thresholds the app reasons with — the lid lock,
 room temperature, coil rate, UV cycle length and lamp life. The coil rate is
 accelerated so a cycle is watchable in a few seconds.
 
+### The other dials
+
+`TUNING` holds the physics. `CONFIG`, just below it, holds everything else
+that used to be typed into the middle of a screen, so none of it has to be
+hunted down in the markup:
+
+| In `CONFIG` | Controls |
+| --- | --- |
+| `brand`, `device` | The wordmark, and the kind, link, firmware and serial on the flask screen |
+| `images` | Where the photographs live, and the label a missing one falls back to |
+| `pourPresets` | The quick-add buttons on Hydration |
+| `homeRecent`, `logLimit` | How many pours the flask screen lists, and how many the log keeps |
+| `chartHeadroom` | Where the top of the chart sits, as a multiple of the goal |
+| `rings` | The diameter and thickness of each ring |
+| `motion` | Slide and toast durations, how fast a changed number catches up |
+| `clock` | The tick interval and how many ticks make a minute |
+| `phone` | The frame's size, bezel, margins and the width it drops the inspector |
+| `copy` | Each screen's title and subtitle |
+
+The phone's measurements and the slide duration are pushed into CSS custom
+properties at startup, so they are written down once rather than in both
+files. Everything is reachable live from the console:
+
+```js
+PULSE.CONFIG.pourPresets = [100, 250, 500];
+PULSE.CONFIG.copy.drinks.title = 'Menu';
+PULSE.render();
+```
+
+### Motion
+
+The rings are conic gradients whose sweep is a registered custom property,
+which is what lets them animate to a new value instead of snapping to it.
+Numbers that jump, like the day's total after a pour, glide to the new
+figure rather than cutting. Arriving screens settle their content in a beat
+after the slide, everything tappable dips slightly under a finger, and the
+whole lot is turned off under `prefers-reduced-motion`.
+
 ### Palette
 
 Six values, and red is a signal rather than a surface — it is the LED ring,

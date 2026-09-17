@@ -122,7 +122,79 @@ const TUNING = {
   uvLampMinutes: 6000,  // lamp life
   uvMinutesPerCycle: 1.5,
   refillTemp: 58,       // °F of fresh water from the tap
-  serving: 240          // ml poured by one tap
+  serving: 240,         // ml poured by one tap
+  minPour: 20,          // ml — below this there is nothing left to pour
+  emptyBelow: 40,       // ml — under this the app asks you to refill
+  minSwing: 20          // °F — floor used when estimating heat-ups left
+};
+
+/* ---------------------------------------------------------------------
+   3b · THE DIALS
+   Everything else that used to be typed into the middle of a screen.
+   Copy, sizes, file paths, timings and the phone shell all live here, so
+   any of it can be changed in one place without hunting through markup.
+   --------------------------------------------------------------------- */
+
+const CONFIG = {
+  brand: 'PULSE',
+
+  device: {
+    kind: 'Vacuum flask',
+    link: 'Bluetooth LE',
+    firmware: '2.4.1',
+    serial: 'PLS-0042-KX'
+  },
+
+  /* where the photographs live. The drink file is dir + id + ext. */
+  images: {
+    bottle: 'images/bottle.png',
+    bottleLabel: 'render',
+    drinkDir: 'images/drinks/',
+    drinkExt: '.jpg'
+  },
+
+  pourPresets: [120, 240, 350],   // the quick-add buttons on Hydration
+  homeRecent: 3,                  // pours listed on the flask screen
+  logLimit: 8,                    // how many pours the log keeps
+  chartHeadroom: 1.2,             // top of the chart, as a multiple of goal
+
+  rings: {
+    cycle:     { size: 236, thick: 12 },
+    hydration: { size: 180, thick: 11 },
+    uv:        { size: 172, thick: 11 }
+  },
+
+  motion: {
+    slide: 250,        // ms — screen transition, mirrored into CSS
+    toast: 1900,       // ms — how long a toast stays up
+    tween: 0.3,        // 0..1 — how fast a changed number catches up
+    maxFrame: 0.08     // s — largest step one animation frame may take
+  },
+
+  clock: {
+    tickMs: 1000,      // the slow tick
+    ticksPerMinute: 60 // ticks before the log ages by a minute
+  },
+
+  phone: {
+    width: 390,        // the screen inside the frame
+    height: 844,
+    bezel: 12,
+    margin: 64,        // breathing room around the phone on the page
+    gutter: 48,
+    panelWidth: 292,   // the inspector beside it
+    panelGap: 56,
+    panelBreakpoint: 1060,
+    minScale: 0.42
+  },
+
+  copy: {
+    drinks:  { title:'Drinks',      sub:'Tap one for how to make it, then heat' },
+    hydrate: { title:'Hydration',   sub:'Everything you have poured today' },
+    uv:      { title:'UV-C Purify', sub:'Sterilise the water and the lid seal' },
+    stats:   { title:'Stats',       sub:'Seven days of pours, straight from the log' },
+    device:  { title:'Flask',       sub:'Paired over ' }   // + device.link
+  }
 };
 
 /* runtime bookkeeping — animation only, not app data */
@@ -135,7 +207,8 @@ const runtime = {
   busy: false,
   lastTs: 0,
   toastTimer: null,
-  minuteAcc: 0
+  minuteAcc: 0,
+  bind: null
 };
 
 /* ---------------------------------------------------------------------
@@ -259,7 +332,7 @@ const derive = {
 
   /* how many full heat-ups the remaining battery is good for */
   batteryCycles(){
-    const swing = Math.max(20, state.targetTemp - TUNING.ambient);
+    const swing = Math.max(TUNING.minSwing, state.targetTemp - TUNING.ambient);
     return Math.max(0, Math.floor(state.battery / (swing * TUNING.battPerDegree)));
   },
 
@@ -305,13 +378,13 @@ function shot(kind, src, alt, fallback){
 
 function bottleShot(){
   return '<div class="bottle">' +
-    shot('bottle', 'images/bottle.png', 'PULSE Flask', 'render') +
+    shot('bottle', CONFIG.images.bottle, CONFIG.brand + ' Flask', CONFIG.images.bottleLabel) +
     '<div class="led" data-led></div>' +
   '</div>';
 }
 
 function drinkShot(d, kind){
-  return shot(kind, 'images/drinks/' + d.id + '.jpg', '', d.name);
+  return shot(kind, CONFIG.images.drinkDir + d.id + CONFIG.images.drinkExt, '', d.name);
 }
 
 /* the img cannot render, so take it out and let the slot show its label */
@@ -325,8 +398,12 @@ function imgFail(img){
    --------------------------------------------------------------------- */
 
 function ring(o){
+  const size = CONFIG.rings[o.key] || { size:160, thick:11 };
+  /* the opening value is written inline so a redraw picks up where the
+     ring already was, instead of sweeping round from zero */
+  const start = RINGS[o.key] ? clamp(RINGS[o.key](), 0, 1).toFixed(4) : 0;
   return '<div class="ring" data-ring="' + o.key + '" ' +
-    'style="--size:' + o.size + 'px;--thick:' + o.thick + 'px">' +
+    'style="--size:' + size.size + 'px;--thick:' + size.thick + 'px;--pct:' + start + '">' +
     '<div class="ring__face"></div>' +
     '<div class="ring__inner">' + (o.inner || '') + '</div>' +
   '</div>';
@@ -380,7 +457,7 @@ function primaryAction(){
     return { act:'none', label:'UV-C cycle running', cls:'btn--ghost', disabled:true };
   if (phase === 'heating')
     return { act:'stopCycle', label:'Stop · <span data-live="eta"></span> left', cls:'btn--stop' };
-  if (state.volumeMl < 40)
+  if (state.volumeMl < TUNING.emptyBelow)
     return { act:'refill', label:'Refill the flask', cls:'btn--primary' };
   if (derive.delta() > TUNING.readyBand)
     return { act:'startCycle', label:'Heat to ' + fmtTemp(state.targetTemp), cls:'btn--primary' };
@@ -422,7 +499,7 @@ SCREENS.home = {
     return '' +
     '<header class="apphead">' +
       '<div>' +
-        '<div class="apphead__brand">PULSE</div>' +
+        '<div class="apphead__brand">' + CONFIG.brand + '</div>' +
         '<div class="apphead__sub" data-live="device.line"></div>' +
       '</div>' +
       '<button class="chip" data-act="go" data-arg="device">' +
@@ -457,7 +534,7 @@ SCREENS.home = {
 
     '<div class="sectitle">Recent pours<span data-live="recent.total"></span></div>' +
     (state.recentDrinks.length
-      ? state.recentDrinks.slice(0, 3).map(logRow).join('')
+      ? state.recentDrinks.slice(0, CONFIG.homeRecent).map(logRow).join('')
       : '<div class="empty">Nothing poured yet today.</div>') +
 
     '<p class="note" data-live="note.home"></p>';
@@ -469,7 +546,7 @@ SCREENS.drinks = {
   tabs:true,
   render(){
     return '' +
-    pageHead('Drinks', 'Tap one for how to make it, then heat') +
+    pageHead(CONFIG.copy.drinks.title, CONFIG.copy.drinks.sub) +
     '<div class="drinks">' +
       DRINKS.map(d => {
         const on = d.id === state.selectedDrink;
@@ -526,7 +603,7 @@ SCREENS.heat = {
 
     '<div class="ringwrap">' +
       ring({
-        key:'cycle', size:236, thick:12,
+        key:'cycle',
         inner:'<div class="ring__big" data-live="temp.current" data-hot></div>' +
               '<div class="ring__sub" data-live="cycle.sub"></div>'
       }) +
@@ -556,11 +633,11 @@ SCREENS.hydrate = {
   render(){
     const d = selected();
     return '' +
-    pageHead('Hydration', 'Everything you have poured today') +
+    pageHead(CONFIG.copy.hydrate.title, CONFIG.copy.hydrate.sub) +
 
     '<div class="card card--center">' +
       ring({
-        key:'hydration', size:180, thick:11,
+        key:'hydration',
         inner:'<div class="ring__big" data-live="hydration.today"></div>' +
               '<div class="ring__sub" data-live="hydration.of"></div>'
       }) +
@@ -569,7 +646,7 @@ SCREENS.hydrate = {
 
     '<div class="sectitle">Log a pour</div>' +
     '<div class="grid3">' +
-      [120, 240, 350].map(ml =>
+      CONFIG.pourPresets.map(ml =>
         '<button class="stat stat--action" data-act="addWater" data-arg="' + ml + '">' +
           '<span class="stat__v">+' + ml + '</span><span class="stat__s">ml</span>' +
         '</button>'
@@ -600,11 +677,11 @@ SCREENS.uv = {
   tabs:true,
   render(){
     return '' +
-    pageHead('UV-C Purify', 'Sterilise the water and the lid seal') +
+    pageHead(CONFIG.copy.uv.title, CONFIG.copy.uv.sub) +
 
     '<div class="card card--center" data-uvcard>' +
       ring({
-        key:'uv', size:172, thick:11,
+        key:'uv',
         inner:'<div class="ring__big" data-live="uv.big"></div>' +
               '<div class="ring__sub" data-live="uv.small"></div>'
       }) +
@@ -639,10 +716,10 @@ SCREENS.uv = {
 SCREENS.stats = {
   tabs:true,
   render(){
-    const max = Math.max(state.hydrationGoal * 1.2, ...state.history.map(derive.dayMl));
+    const max = Math.max(state.hydrationGoal * CONFIG.chartHeadroom, ...state.history.map(derive.dayMl));
     const fav = derive.favourite();
     return '' +
-    pageHead('Stats', 'Seven days of pours, straight from the log') +
+    pageHead(CONFIG.copy.stats.title, CONFIG.copy.stats.sub) +
 
     '<div class="card">' +
       '<div class="card__head">' +
@@ -697,7 +774,7 @@ SCREENS.device = {
   full:true,
   render(){
     return '' +
-    pageHead('Flask', 'Paired over Bluetooth LE', true) +
+    pageHead(CONFIG.copy.device.title, CONFIG.copy.device.sub + CONFIG.device.link, true) +
 
     '<div class="card">' +
       '<div class="card__head"><span class="card__title">Battery</span>' +
@@ -732,8 +809,8 @@ SCREENS.device = {
       '<div class="kv">' +
         '<div><dt>Capacity</dt><dd>' + state.capacityMl + ' ml</dd></div>' +
         '<div><dt>In the flask</dt><dd data-live="flask.volume"></dd></div>' +
-        '<div><dt>Firmware</dt><dd>2.4.1</dd></div>' +
-        '<div><dt>Serial</dt><dd>PLS-0042-KX</dd></div>' +
+        '<div><dt>Firmware</dt><dd>' + CONFIG.device.firmware + '</dd></div>' +
+        '<div><dt>Serial</dt><dd>' + CONFIG.device.serial + '</dd></div>' +
       '</div>' +
     '</div>' +
 
@@ -788,7 +865,7 @@ const LIVE = {
   'battery.detail': () => 'About ' + derive.batteryCycles() + ' more heat-ups to ' +
     fmtTemp(state.targetTemp) + ', or ' + Math.floor(state.battery / TUNING.battPerUv) + ' UV-C cycles.',
 
-  'device.line': () => 'Vacuum flask · ' + (derive.uvFresh() ? 'water certified' : 'purify due'),
+  'device.line': () => CONFIG.device.kind + ' · ' + (derive.uvFresh() ? 'water certified' : 'purify due'),
 
   'hydration.pct':  () => Math.round(derive.hydrationPct() * 100) + '%',
   'hydration.left': () => derive.hydrationLeft() > 0 ? derive.hydrationLeft() + ' ml to go' : 'goal met',
@@ -872,40 +949,89 @@ const RINGS = {
     : clamp(derive.uvExpiresIn() / TUNING.uvFreshFor, 0, 1)
 };
 
+/* Numbers that should glide to a new value rather than jump to it. The
+   displayed figure is kept here rather than on the node, so it survives a
+   redraw and carries on from where it was. */
+const TWEENS = {
+  'temp.current':    { get: () => state.currentTemp,    fmt: (n) => fmtTemp(n) },
+  'hydration.today': { get: () => state.hydrationToday, fmt: (n) => String(Math.round(n)) }
+};
+const tweenAt = {};
+let tweenRaf = null;
+
+function scheduleTween(){
+  if (tweenRaf !== null) return;
+  tweenRaf = requestAnimationFrame(() => { tweenRaf = null; paint(); });
+}
+
+/* paint() runs on every animation frame, so the node lookups are done once
+   per redraw instead of once per frame */
+function rebind(){
+  runtime.bind = {
+    live:   $$('[data-live]'),
+    rings:  $$('[data-ring]'),
+    hot:    $$('[data-hot]'),
+    mode:   $$('[data-mode]'),
+    tags:   $$('.tag[data-mode]'),
+    led:    $$('[data-led]'),
+    batt:   $$('[data-fill="battery"]'),
+    uvcard: $$('[data-uvcard]'),
+    tabs:   $$('[data-tab]')
+  };
+}
+
 function paint(){
-  $$('[data-live]').forEach(node => {
-    const fn = LIVE[node.getAttribute('data-live')];
+  if (!runtime.bind) rebind();
+  const b = runtime.bind;
+  let moving = false;
+
+  b.live.forEach(node => {
+    const key = node.getAttribute('data-live');
+    const tween = TWEENS[key];
+
+    if (tween){
+      const target = tween.get();
+      let at = tweenAt[key];
+      if (at === undefined || Math.abs(target - at) < 0.4) at = target;
+      else { at += (target - at) * CONFIG.motion.tween; moving = true; }
+      tweenAt[key] = at;
+      const shown = tween.fmt(at);
+      if (node.textContent !== shown) node.textContent = shown;
+      return;
+    }
+
+    const fn = LIVE[key];
     if (!fn) return;
     const value = fn();
     if (node.textContent !== value) node.textContent = value;
   });
 
-  $$('[data-ring]').forEach(node => {
+  b.rings.forEach(node => {
     const fn = RINGS[node.getAttribute('data-ring')];
     if (fn) node.style.setProperty('--pct', clamp(fn(), 0, 1).toFixed(4));
   });
 
   /* red is a signal: the readout turns red only once the lid has locked */
   const hot = state.currentTemp >= TUNING.lockTrip;
-  $$('[data-hot]').forEach(node => node.classList.toggle('is-hot', hot));
-  $$('[data-mode]').forEach(node => node.classList.toggle('is-locked', hot));
-  $$('.tag[data-mode]').forEach(node => node.classList.toggle('tag--locked', hot));
+  b.hot.forEach(node => node.classList.toggle('is-hot', hot));
+  b.mode.forEach(node => node.classList.toggle('is-locked', hot));
+  b.tags.forEach(node => node.classList.toggle('tag--locked', hot));
 
-  $$('[data-led]').forEach(node => {
-    const led = derive.led();
+  const led = derive.led();
+  b.led.forEach(node => {
     node.classList.toggle('is-on', led !== 'off');
     node.classList.toggle('is-pulsing', led === 'pulsing');
   });
 
-  $$('[data-fill="battery"]').forEach(node => {
-    node.style.width = clamp(state.battery, 0, 100) + '%';
-  });
+  b.batt.forEach(node => { node.style.width = clamp(state.battery, 0, 100) + '%'; });
 
-  $$('[data-uvcard]').forEach(node =>
+  b.uvcard.forEach(node =>
     node.classList.toggle('is-purifying', state.status === 'purifying'));
 
-  $$('[data-tab]').forEach(node =>
+  b.tabs.forEach(node =>
     node.classList.toggle('is-active', node.getAttribute('data-tab') === runtime.screen));
+
+  if (moving) scheduleTween();
 }
 
 /* ---------------------------------------------------------------------
@@ -913,7 +1039,7 @@ function paint(){
    --------------------------------------------------------------------- */
 
 const TAB_ORDER = TABS.map(t => t.id);
-const SLIDE_MS = 250;
+const SLIDE_MS = CONFIG.motion.slide;
 
 function chrome(){
   const bar = $('.tabbar');
@@ -948,20 +1074,22 @@ function navigate(to, mode){
   stack.appendChild(entering);
   runtime.screen = to;
   chrome();
+  rebind();
   paint();
 
   void entering.offsetWidth;            /* commit the start position */
   runtime.busy = true;
 
-  entering.classList.add('is-sliding');
+  entering.classList.add('is-sliding', 'is-entering');
   entering.classList.remove('from-right', 'from-left');
   entering.classList.add('at-rest');
   if (leaving) leaving.classList.add('is-sliding', dir > 0 ? 'to-left' : 'to-right');
 
   setTimeout(() => {
     if (leaving) leaving.remove();
-    entering.classList.remove('is-sliding');
+    entering.classList.remove('is-sliding', 'is-entering');
     runtime.busy = false;
+    rebind();
   }, SLIDE_MS);
 }
 
@@ -984,6 +1112,7 @@ function render(){
   current.innerHTML = SCREENS[runtime.screen].render();
   current.scrollTop = offset;
   chrome();
+  rebind();
   paint();
 }
 
@@ -993,7 +1122,7 @@ function toast(message){
   el.textContent = message;
   el.classList.add('is-up');
   clearTimeout(runtime.toastTimer);
-  runtime.toastTimer = setTimeout(() => el.classList.remove('is-up'), 1900);
+  runtime.toastTimer = setTimeout(() => el.classList.remove('is-up'), CONFIG.motion.toast);
 }
 
 /* ---------------------------------------------------------------------
@@ -1004,7 +1133,7 @@ function toast(message){
 
 function pour(ml){
   const amount = Math.min(ml, Math.round(state.volumeMl));
-  if (amount < 20){ toast('Flask is empty — refill it'); return; }
+  if (amount < TUNING.minPour){ toast('Flask is empty — refill it'); return; }
   state.volumeMl = Math.max(0, state.volumeMl - amount);
   state.hydrationToday += amount;
   state.recentDrinks.unshift({
@@ -1013,7 +1142,7 @@ function pour(ml){
     minutesAgo: 0,
     temp: Math.round(state.currentTemp)
   });
-  if (state.recentDrinks.length > 8) state.recentDrinks.length = 8;
+  if (state.recentDrinks.length > CONFIG.logLimit) state.recentDrinks.length = CONFIG.logLimit;
   render();
   toast('Poured ' + fmtMl(amount) + ' · ' + derive.mode().tag);
 }
@@ -1117,7 +1246,7 @@ function startLoop(){
 }
 
 function loop(ts){
-  const dt = Math.min(0.08, (ts - runtime.lastTs) / 1000);
+  const dt = Math.min(CONFIG.motion.maxFrame, (ts - runtime.lastTs) / 1000);
   runtime.lastTs = ts;
   let running = false;
 
@@ -1173,7 +1302,7 @@ function slowTick(){
   }
 
   runtime.minuteAcc += 1;
-  if (runtime.minuteAcc >= 60){
+  if (runtime.minuteAcc >= CONFIG.clock.ticksPerMinute){
     runtime.minuteAcc = 0;
     state.lastUvMinutesAgo += 1;
     state.recentDrinks.forEach(entry => { entry.minutesAgo += 1; });
@@ -1211,7 +1340,7 @@ function inspectorRow(label, key){
 function panelMarkup(){
   return '' +
   '<div class="panel__head">' +
-    '<div class="panel__title">PULSE</div>' +
+    '<div class="panel__title">' + CONFIG.brand + '</div>' +
     '<p class="panel__lede">Companion app for the PULSE vacuum flask. ' +
       'A clickable mock — no backend, no framework, no build step.</p>' +
   '</div>' +
@@ -1260,14 +1389,30 @@ function panelMarkup(){
   '</div>';
 }
 
+/* CONFIG is the only place these are written down; CSS reads them here */
+function applyShell(){
+  const ph = CONFIG.phone;
+  const root = document.documentElement.style;
+  root.setProperty('--ph-w', ph.width + 'px');
+  root.setProperty('--ph-h', ph.height + 'px');
+  root.setProperty('--ph-bezel', ph.bezel + 'px');
+  root.setProperty('--panel-w', ph.panelWidth + 'px');
+  root.setProperty('--panel-gap', ph.panelGap + 'px');
+  root.setProperty('--slide', CONFIG.motion.slide + 'ms');
+}
+
 function fitPhone(){
-  const panelWidth = window.innerWidth > 1060 ? 292 + 56 : 0;
+  const ph = CONFIG.phone;
+  const frameW = ph.width + ph.bezel * 2;
+  const frameH = ph.height + ph.bezel * 2;
+  const beside = window.innerWidth > ph.panelBreakpoint ? ph.panelWidth + ph.panelGap : 0;
   const scale = Math.min(
     1,
-    (window.innerHeight - 64) / 868,
-    (window.innerWidth - panelWidth - 48) / 414
+    (window.innerHeight - ph.margin) / frameH,
+    (window.innerWidth - beside - ph.gutter) / frameW
   );
-  $('#phone').style.setProperty('--scale', Math.max(0.42, scale).toFixed(3));
+  $('#phone').style.setProperty('--scale', Math.max(ph.minScale, scale).toFixed(3));
+  document.body.classList.toggle('is-narrow', window.innerWidth <= ph.panelBreakpoint);
 }
 
 /* ---------------------------------------------------------------------
@@ -1285,6 +1430,7 @@ function boot(){
 
   $('.stack').appendChild(buildScreen(runtime.screen));
   $('#panel').innerHTML = panelMarkup();
+  rebind();
 
   document.addEventListener('click', (event) => {
     const hit = event.target.closest ? event.target.closest('[data-act]') : null;
@@ -1295,13 +1441,14 @@ function boot(){
 
   window.addEventListener('resize', fitPhone);
 
+  applyShell();
   fitPhone();
   chrome();
   paint();
-  setInterval(slowTick, 1000);
+  setInterval(slowTick, CONFIG.clock.tickMs);
 
   /* handy while demoing: `state.hydrationGoal = 3000; PULSE.render()` */
-  window.PULSE = { state, DRINKS, TUNING, derive, render, paint, navigate };
+  window.PULSE = { state, DRINKS, TUNING, CONFIG, derive, render, paint, navigate, applyShell, fitPhone };
 }
 
 document.addEventListener('DOMContentLoaded', boot);
