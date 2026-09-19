@@ -159,9 +159,9 @@ const CONFIG = {
   chartHeadroom: 1.2,             // top of the chart, as a multiple of goal
 
   rings: {
-    cycle:     { size: 236, thick: 12 },
-    hydration: { size: 180, thick: 11 },
-    uv:        { size: 172, thick: 11 }
+    cycle:     { size: 232, thick: 5 },
+    hydration: { size: 178, thick: 5 },
+    uv:        { size: 170, thick: 5 }
   },
 
   motion: {
@@ -189,6 +189,7 @@ const CONFIG = {
   },
 
   copy: {
+    home:    { eyebrow:'Flask temperature', keeping:'Selected' },
     drinks:  { title:'Drinks',      sub:'Tap one for how to make it, then heat' },
     hydrate: { title:'Hydration',   sub:'Everything you have poured today' },
     uv:      { title:'UV-C Purify', sub:'Sterilise the water and the lid seal' },
@@ -510,6 +511,7 @@ SCREENS.home = {
     bottleShot() +
 
     '<section class="readout">' +
+      '<div class="eyebrow">' + CONFIG.copy.home.eyebrow + '</div>' +
       '<div class="readout__temp" data-live="temp.current" data-hot></div>' +
       '<div class="readout__status" data-live="status.line"></div>' +
       '<div class="lockline" data-mode>' +
@@ -518,13 +520,14 @@ SCREENS.home = {
       '</div>' +
     '</section>' +
 
+    '<div class="cta">' + primaryButton() + '</div>' +
+
+    '<div class="sectitle">' + CONFIG.copy.home.keeping + '</div>' +
     '<button class="row" data-act="openDrink" data-arg="' + d.id + '">' +
       drinkShot(d, 'thumb') +
       '<span class="row__body"><b>' + d.name + '</b><small>' + d.goesWellWith + '</small></span>' +
       '<span class="row__meta">' + fmtTemp(d.temp) + '<small>target</small></span>' +
     '</button>' +
-
-    '<div class="cta">' + primaryButton() + '</div>' +
 
     '<div class="grid3">' +
       statTile({ go:'hydrate', label:'Hydration', live:'hydration.pct', subLive:'hydration.left' }) +

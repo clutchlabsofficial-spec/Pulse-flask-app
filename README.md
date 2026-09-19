@@ -4,7 +4,7 @@ It's an app for pulse flask bottle
 ## Companion app prototype
 
 A clickable phone mockup of the companion app for the PULSE vacuum flask:
-a smart flask that heats or chills a drink to a per-drink target temperature,
+a smart flask that heats a drink to a per-drink target temperature,
 purifies its own water with a UV-C lamp, and logs what you drink.
 
 ### Running it
@@ -18,6 +18,7 @@ no backend — plain HTML, CSS and vanilla JavaScript, three files:
 | `style.css` | Phone frame, screens, rings, transitions. |
 | `script.js` | The state, the drinks, and every screen. |
 | `images/` | Your photographs. Empty in the repo. |
+| `fonts/` | Two variable fonts, self-hosted. 108 KB the pair. |
 
 ### Photographs
 
@@ -122,6 +123,21 @@ the active tab, and the temperature readout once the lid has locked.
 | `#dee2e6` | primary text |
 | `#f8f9fa` | emphasis text |
 | `#d62828` | LED ring, active state, hot indicator |
+
+### Typography
+
+Two self-hosted variable fonts, no CDN and no network call. Newsreader, a
+serif, carries the product's voice: page titles, drink names, and every
+figure the flask reports — the temperature, the millilitres, the cycle
+count. Inter sets every label, in small caps with wide tracking, so a label
+never competes with the number underneath it.
+
+The layout is hairlines rather than boxes. Rows, cards, stat grids and
+sections are all separated by a single `#343a40` rule, columns line up on
+the page gutter, and two rules never stack with an empty band between them.
+The only filled surfaces left are the segmented control and the chart bars;
+the main action is an outline that fills in while it is held. Content
+dissolves into the tab bar instead of being cut by it.
 
 ### Screens
 
