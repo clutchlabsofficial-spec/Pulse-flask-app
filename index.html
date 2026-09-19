@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PULSE Flask</title>
+  <meta name="description" content="Clickable phone prototype for the PULSE smart flask companion app." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Every pixel of app content below is rendered by script.js from a single
+       state object. There is deliberately no copy, no number and no drink name
+       written into this file. -->
+  <main class="stage">
+    <div class="phone" id="phone">
+      <div class="phone__frame">
+        <div class="phone__glass">
+          <div class="viewport" id="viewport"></div>
+          <div class="phone__island"></div>
+        </div>
+      </div>
+    </div>
+    <aside class="panel" id="panel"></aside>
+  </main>
+  <noscript>
+    <p style="color:#6c757d;font:14px system-ui;text-align:center">
+      This prototype draws itself with JavaScript. Please enable it.
+    </p>
+  </noscript>
+  <script src="script.js"></script>
+</body>
+</html>
